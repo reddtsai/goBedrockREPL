@@ -34,6 +34,7 @@ func (c *Claude3Sonnet) InvokeModel(ctx context.Context, msg string) string {
 	payload := InvokeModelRequest{
 		AnthropicVersion: c.AnthropicVersion,
 		MaxTokens:        1024,
+		SystemPrompt:     WEATHER_SYSTEM_PROMPT,
 		Messages: []Message{
 			{
 				Role: "user",
@@ -68,8 +69,11 @@ func (c *Claude3Sonnet) InvokeModel(ctx context.Context, msg string) string {
 }
 
 func (c *Claude3Sonnet) Converse(ctx context.Context, msg string) string {
+	var sysPrompt []bt.SystemContentBlock
+	sysPrompt = append(sysPrompt, &bt.SystemContentBlockMemberText{Value: WEATHER_SYSTEM_PROMPT})
 	input := &bedrockruntime.ConverseInput{
 		ModelId: aws.String(c.ModelID),
+		System:  sysPrompt,
 		InferenceConfig: &bt.InferenceConfiguration{
 			MaxTokens: aws.Int32(c.MaxTokens),
 		},
