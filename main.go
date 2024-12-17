@@ -63,7 +63,8 @@ func main() {
 			break
 		}
 
-		output := c3.Claude3SonnetInvokeModel(ctx, input)
+		// output := c3.InvokeModel(ctx, input)
+		output := c3.Converse(ctx, input)
 
 		fmt.Println("\033[32m", output, "\033[0m")
 	}

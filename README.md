@@ -15,7 +15,15 @@ anthropic.claude-3-sonnet-20240229-v1:0:200k
 anthropic.claude-3-sonnet-20240229-v1:0
 ```
 
-## Amazon Bedrock
+### InvokeModel
+
+### Converse
+
+## Reference
+
+[AWS Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html)
+
+### Amazon Bedrock
 
 以下是 Amazon Bedrock 支援的操作：
 
@@ -77,7 +85,7 @@ anthropic.claude-3-sonnet-20240229-v1:0
 - 更新市場模型端點（UpdateMarketplaceModelEndpoint）
 - 更新預配置模型吞吐量（UpdateProvisionedModelThroughput）
 
-## Amazon Bedrock Runtime
+### Amazon Bedrock Runtime
 
 以下是 Amazon Bedrock Runtime 支援的操作：
 
