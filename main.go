@@ -66,6 +66,7 @@ func main() {
 		// output := c3.InvokeModel(ctx, input)
 		output := c3.Converse(ctx, input)
 		// output := c3.ConverseWithTool(ctx, input)
+		// output := c3.ConverseImage(ctx, input)
 
 		fmt.Println("\033[32m", output, "\033[0m")
 	}

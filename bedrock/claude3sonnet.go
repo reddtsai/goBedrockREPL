@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -233,6 +234,53 @@ func (c *Claude3Sonnet) ConverseWithTool(ctx context.Context, msg string) string
 			text, _ := responseContentBlock.(*bt.ContentBlockMemberText)
 			txt = text.Value
 		}
+	}
+
+	return txt
+}
+
+func (c *Claude3Sonnet) ConverseImage(ctx context.Context, msg string) string {
+	input := &bedrockruntime.ConverseInput{
+		ModelId: aws.String(c.ModelID),
+		InferenceConfig: &bt.InferenceConfiguration{
+			Temperature: aws.Float32(0.8),
+		},
+	}
+
+	bytes, err := os.ReadFile("cat.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	message := bt.Message{
+		Role: bt.ConversationRoleUser,
+		Content: []bt.ContentBlock{
+			&bt.ContentBlockMemberText{
+				Value: "Can you help me?",
+			},
+			&bt.ContentBlockMemberImage{
+				Value: bt.ImageBlock{
+					Format: bt.ImageFormatPng,
+					Source: &bt.ImageSourceMemberBytes{
+						Value: bytes,
+					},
+				},
+			},
+		},
+	}
+	input.Messages = append(input.Messages, message)
+	resp, err := c.Client.Converse(ctx, input)
+	if err != nil {
+		log.Fatal(err)
+	}
+	jsonResp, _ := json.MarshalIndent(resp, "", "  ")
+	fmt.Println(string(jsonResp))
+
+	var txt string
+	result := resp.Output.(*bt.ConverseOutputMemberMessage).Value
+	if len(result.Content) > 0 {
+		responseContentBlock := result.Content[0]
+		txt = responseContentBlock.(*bt.ContentBlockMemberText).Value
 	}
 
 	return txt
