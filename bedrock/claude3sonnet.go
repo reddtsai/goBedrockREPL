@@ -3,11 +3,32 @@ package bedrock
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	bt "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+)
+
+var (
+	tool = map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"location": map[string]interface{}{
+				"type":        "string",
+				"description": "The city and state, e.g. San Francisco, CA",
+			},
+			"unit": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"celsius", "fahrenheit"},
+				"description": "The unit of temperature, either 'celsius' or 'fahrenheit'",
+			},
+		},
+	}
+
+	stop_reason = "tool_use"
 )
 
 type IClaude3Sonnet interface {
@@ -74,16 +95,33 @@ func (c *Claude3Sonnet) Converse(ctx context.Context, msg string) string {
 	input := &bedrockruntime.ConverseInput{
 		ModelId: aws.String(c.ModelID),
 		System:  sysPrompt,
-		InferenceConfig: &bt.InferenceConfiguration{
-			MaxTokens: aws.Int32(c.MaxTokens),
-		},
+		// InferenceConfig: &bt.InferenceConfiguration{
+		// 	MaxTokens: aws.Int32(c.MaxTokens),
+		// },
 	}
+
 	message := bt.Message{
 		Role: bt.ConversationRoleUser,
 		Content: []bt.ContentBlock{
 			&bt.ContentBlockMemberText{
 				Value: msg,
 			},
+			// &bt.ContentBlockMemberText{
+			// 	Value: `
+			// 	You should answer based on the user's question, generate a JSON object with the following structure:
+			// 	{
+			// 		"Content": [
+			// 		{
+			// 			"Value": "<Provide a concise answer to the user's question here>",
+			// 			"Temperatures": "<temperatures in °C (°F)>",
+			// 			"Wind": {
+			// 				"Speed":"<wind speed in km/h (mph)>",
+			// 				"Desc":"<wind direction>"
+			// 			},
+			// 			"Conditions": "<Keep weather reports concise. Sparingly use emojis where appropriate.>"
+			// 		}]
+			// 	}`,
+			// },
 		},
 	}
 	input.Messages = append(input.Messages, message)
@@ -91,9 +129,111 @@ func (c *Claude3Sonnet) Converse(ctx context.Context, msg string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	result, _ := resp.Output.(*bt.ConverseOutputMemberMessage)
-	responseContentBlock := result.Value.Content[0]
-	text, _ := responseContentBlock.(*bt.ContentBlockMemberText)
+	// jsonResp, _ := json.MarshalIndent(resp, "", "  ")
+	// fmt.Println(string(jsonResp))
 
-	return text.Value
+	var txt string
+	result := resp.Output.(*bt.ConverseOutputMemberMessage).Value
+	if len(result.Content) > 0 {
+		if resp.StopReason == "tool_use" {
+			for _, tc := range result.Content {
+				if _, ok := tc.(*bt.ContentBlockMemberToolUse); !ok {
+					continue
+				}
+				var toolUse bt.ToolUseBlock = tc.(*bt.ContentBlockMemberToolUse).Value
+				txt = *toolUse.Name
+				break
+			}
+		} else {
+			responseContentBlock := result.Content[0]
+			text, _ := responseContentBlock.(*bt.ContentBlockMemberText)
+			txt = text.Value
+		}
+	}
+
+	return txt
+}
+
+func (c *Claude3Sonnet) ConverseWithTool(ctx context.Context, msg string) string {
+	var sysPrompt []bt.SystemContentBlock
+	sysPrompt = append(sysPrompt, &bt.SystemContentBlockMemberText{Value: WEATHER_SYSTEM_PROMPT})
+	// var toolSpecs []bt.ToolSpecification
+	toolSpec := bt.ToolSpecification{
+		Name:        aws.String("get_weather"),
+		Description: aws.String("Get the current weather in a given location"),
+		InputSchema: &bt.ToolInputSchemaMemberJson{
+			Value: document.NewLazyDocument(tool),
+		},
+	}
+	var tools []bt.Tool
+	tools = append(tools, &bt.ToolMemberToolSpec{
+		Value: toolSpec,
+	})
+	toolConfig := &bt.ToolConfiguration{
+		Tools: tools,
+	}
+	input := &bedrockruntime.ConverseInput{
+		ModelId: aws.String(c.ModelID),
+		System:  sysPrompt,
+		// InferenceConfig: &bt.InferenceConfiguration{
+		// 	MaxTokens: aws.Int32(c.MaxTokens),
+		// },
+		ToolConfig: toolConfig,
+	}
+
+	message := bt.Message{
+		Role: bt.ConversationRoleUser,
+		Content: []bt.ContentBlock{
+			&bt.ContentBlockMemberText{
+				Value: msg,
+			},
+			// &bt.ContentBlockMemberText{
+			// 	Value: `
+			// 	You should answer based on the user's question, generate a JSON object with the following structure:
+			// 	{
+			// 		"Content": [
+			// 		{
+			// 			"Value": "<Provide a concise answer to the user's question here>",
+			// 			"Temperatures": "<temperatures in °C (°F)>",
+			// 			"Wind": {
+			// 				"Speed":"<wind speed in km/h (mph)>",
+			// 				"Desc":"<wind direction>"
+			// 			},
+			// 			"Conditions": "<Keep weather reports concise. Sparingly use emojis where appropriate.>"
+			// 		}]
+			// 	}`,
+			// },
+		},
+	}
+	input.Messages = append(input.Messages, message)
+	resp, err := c.Client.Converse(ctx, input)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// jsonResp, _ := json.MarshalIndent(resp, "", "  ")
+	// fmt.Println(string(jsonResp))
+
+	var txt string
+	result := resp.Output.(*bt.ConverseOutputMemberMessage).Value
+	if len(result.Content) > 0 {
+		if string(resp.StopReason) == stop_reason {
+			for _, tc := range result.Content {
+				if _, ok := tc.(*bt.ContentBlockMemberToolUse); !ok {
+					continue
+				}
+				var toolUse bt.ToolUseBlock = tc.(*bt.ContentBlockMemberToolUse).Value
+				txt = *toolUse.Name
+				toolInput := make(map[string]interface{})
+				toolUse.Input.UnmarshalSmithyDocument(&toolInput)
+				fmt.Println(toolInput)
+				break
+			}
+		} else {
+			responseContentBlock := result.Content[0]
+			text, _ := responseContentBlock.(*bt.ContentBlockMemberText)
+			txt = text.Value
+		}
+	}
+
+	return txt
 }
